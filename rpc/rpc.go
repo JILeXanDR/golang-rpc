@@ -1,13 +1,29 @@
-package main
+package rpc
 
 import (
-	"log"
-	"reflect"
-	"github.com/gorilla/rpc/v2"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/rpc/v2"
+	jsonCodec "github.com/gorilla/rpc/v2/json"
+	"log"
 	"os"
+	"reflect"
 )
+
+func NewRPCServer(services map[string]interface{}) *rpc.Server {
+
+	handler := rpc.NewServer()
+
+	handler.RegisterCodec(jsonCodec.NewCodec(), "application/json")
+
+	for name, service := range services {
+		handler.RegisterService(service, name)
+	}
+
+	debugMethods(handler)
+
+	return handler
+}
 
 func debugMethods(rpc *rpc.Server) {
 	services := reflect.Indirect(reflect.ValueOf(*rpc).FieldByName("services")).FieldByName("services")

@@ -1,38 +1,49 @@
 package main
 
 import (
-	"net/http"
-	"log"
-	"rpc/methods"
+	server "github.com/JILeXanDR/golang-rpc/rpc"
+	"github.com/JILeXanDR/golang-rpc/rpc/auth"
+	"github.com/JILeXanDR/golang-rpc/rpc/errors"
+	"github.com/JILeXanDR/golang-rpc/rpc/health"
 	"github.com/gorilla/rpc/v2"
-	"github.com/gorilla/rpc/v2/json"
+	"gopkg.in/go-playground/validator.v9"
+	"log"
+	"net/http"
 )
 
 func main() {
-	s := rpc.NewServer()
 
-	s.RegisterBeforeFunc(func(i *rpc.RequestInfo) {
-		log.Printf("[hook before method call]: %v", i.Method)
+	v9 := validator.New()
+
+	handler := server.NewRPCServer(
+		map[string]interface{}{
+			"Auth":   auth.New(),
+			"Health": health.New(),
+		},
+	)
+
+	handler.RegisterBeforeFunc(func(r *rpc.RequestInfo) {
+		log.Printf("[RPC:BEFORE] %v", r.Method)
 	})
 
-	s.RegisterAfterFunc(func(i *rpc.RequestInfo) {
-		log.Printf("[hook after method call]: %v", i.Method)
-		log.Println(i.Error)
+	handler.RegisterAfterFunc(func(r *rpc.RequestInfo) {
+		log.Printf("[RPC:AFTER] %v", r.Method)
 	})
 
-	s.RegisterInterceptFunc(func(i *rpc.RequestInfo) *http.Request {
-		return i.Request
+	handler.RegisterInterceptFunc(func(r *rpc.RequestInfo) *http.Request {
+		log.Printf("[RPC:INTERCEPT] %v", r.Method)
+		return r.Request
 	})
 
-	s.RegisterCodec(json.NewCodec(), "application/json")
+	handler.RegisterValidateRequestFunc(func(r *rpc.RequestInfo, i interface{}) error {
+		log.Printf("[RPC:VALIDATE] %v", r.Method)
+		if err := v9.Struct(i); err != nil {
+			return errors.NewValidationErr(err.(validator.ValidationErrors))
+		}
+		return nil
+	})
 
-	s.RegisterService(new(methods.HelloService), "Hello")
-	s.RegisterService(new(methods.AuthorizeService), "Authorize")
-	s.RegisterService(new(methods.PingService), "Ping")
-
-	http.Handle("/rpc", s)
-
-	debugMethods(s)
+	http.Handle("/rpc", handler)
 
 	log.Fatal(http.ListenAndServe(":9999", nil))
 }
